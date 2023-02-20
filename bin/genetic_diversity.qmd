@@ -2,13 +2,128 @@
 title: "Genetic diversity analises"
 ---
 
-## Datos
+## Objetivos
 
+Descriptivos:
+    - Número de muestras por sitio de muestreo
+    - Número de alelos 
+    - Alelos rarefacción 
+    - Diversidad génica (hs) por población
+    - Diversidad génica por especie
+
+Estructura genética 
+    - Fst?
+    - AMOVA (entre especies, entre poblaciones dentro de las especies) - PHIst 
+
+Estructura filogeográfica 
+    - Gst vs Nst
+
+Red de haplotipos 
+
+
+## Datos
 
 ```{r}
 library(adegenet)
-library(google_sheets4)
+library(googlesheets4)
+library(tidyverse)
+library(hierfstat)
+
 # Cargar los datos en adegenet
 
-df = read_sheet("https://docs.google.com/spreadsheets/d/1_6eW8_ifls_M-ux-ihCcux4zaGr3NoZj/edit?usp=sharing&ouid=110227106175373470000&rtpof=true&sd=true",skip = 1, sheet = 1, header = T)
+df = read_sheet("https://docs.google.com/spreadsheets/d/1TuepHgDTVpBpM4PaWOm3fZCqwoQWpmTCRvU24AWT7B0/edit?usp=sharing", sheet = 1, col_type = "cccddiiiiiiii")
+
+
+genind = df %>% 
+        select(starts_with("locus")) %>% 
+        df2genind(X = .[,-1], ploidy = 1, sep = "")
+
+genind@pop = as.factor(str_remove(df$pop,"pop"))
+genind@strata = df[,c(1,3)] %>% mutate(pop = str_remove(df$pop,"pop"))
+
+genind@other = df[,c(1,2,4,5)]
+
+gind_list = list(hy = genind[which(genind@strata$Species == "Quercus hypoleucoides")], 
+                si =  genind[which(genind@strata$Species == "Quercus scytophylla")],
+                sy = genind[which(genind@strata$Species == "Quercus sideroxyla")])
+names(gind_list) = unique(df$Species)
+
+```
+
+### Mapa muestras 
+```{r}
+Mexico <- map_data(map = "world", region = "mexico")
+
+ggplot()+
+    geom_polygon(data = Mexico, aes(x = long, y = lat, group = group))+
+    geom_point(data = genind@other, aes(x = lon, y = lat, color = Species))
+    
+```
+
+## Descriptivos: Diversidad genética
+
+```{r}
+# summary adegenet
+summary(genind)
+
+# basic stats hierfstat (per locus and overall)
+
+hfstat_all <- genind2hierfstat(genind)
+
+basicstat <- basic.stats(hfstat_all, diploid = FALSE, digits = 2) 
+
+# lista de formatos de hierfstat por especie
+hfstat_list = lapply(gind_list, genind2hierfstat)
+names(hfstat_list) = unique(df$Species)
+
+basicstat_sp = lapply(hfstat_list, function(x) basic.stats(x,diploid = F,digits = 2))
+
+# Hs per population
+hs = Hs(hfstat)
+
+
+```
+
+
+```{r}
+library(mmod)
+
+diff_stats_all <- diff_stats(genind)
+
+diff_stats_sp = lapply(gind_list,diff_stats)
+
+set.seed(20151219) # Be sure to set a seed for any random analysis!
+reps <- chao_bootstrap(genind, nreps = 10)
+summarise_bootstrap(reps, Gst) 
+
+```
+
+## Estructura genética 
+
+
+```{r}
+
+library("poppr")
+res <- poppr.amova(genind, ~  Species/pop, within = FALSE)
+set.seed(98750)
+randtest(res, nrepet = 999)
+
+```
+
+
+## Red de haplotipos
+
+
+```{r}
+library(poppr)
+dist = bitwise.dist(genind)
+setPop(genind) <- ~Species
+net = bruvo.msn(genind)
+
+data(nancycats)
+
+bruvo.msn(genind, replen = rep(2, 51), vertex.label="inds", 
+               vertex.label.cex=0.7, vertex.label.dist=0.4)
+
+poppr.msn(genind, dist, gadj = 15, vertex.label = NA)
 ```
