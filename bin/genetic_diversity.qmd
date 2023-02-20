@@ -1,0 +1,14 @@
+---
+title: "Genetic diversity analises"
+---
+
+## Datos
+
+
+```{r}
+library(adegenet)
+library(google_sheets4)
+# Cargar los datos en adegenet
+
+df = read_sheet("https://docs.google.com/spreadsheets/d/1_6eW8_ifls_M-ux-ihCcux4zaGr3NoZj/edit?usp=sharing&ouid=110227106175373470000&rtpof=true&sd=true",skip = 1, sheet = 1, header = T)
+```
