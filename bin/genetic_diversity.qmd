@@ -1,14 +1,16 @@
 ---
 title: "Genetic diversity analises"
+format: 
+  html:
+    page-layout: full
+self-contained: true
+fig-width: 11
+fig-height: 9
+execute: 
+  warning: false
 ---
 
 ## Objetivos
-
-Previos:
-    - Alelos nulos ?
-    - HWE?
-    - LD?
-
 
 Descriptivos:
     - Número de muestras por sitio de muestreo
@@ -37,8 +39,9 @@ library(hierfstat)
 
 # Cargar los datos en adegenet
 
-df = read_sheet("https://docs.google.com/spreadsheets/d/1TuepHgDTVpBpM4PaWOm3fZCqwoQWpmTCRvU24AWT7B0/edit?usp=sharing", sheet = 1, col_type = "cccddiiiiiiii")
+#df = read_sheet("https://docs.google.com/spreadsheets/d/1TuepHgDTVpBpM4PaWOm3fZCqwoQWpmTCRvU24AWT7B0/edit?usp=sharing", sheet = 1, col_type = "cccddiiiiiiii")
 
+df = read.csv("../data/TRES ESPJUNTAS FILOGENPOP - TRES ESPJUNTAS FILOGENPOP.csv", header = T) 
 
 genind = df %>% 
         select(starts_with("locus")) %>% 
@@ -58,17 +61,20 @@ names(gind_list) = unique(df$Species)
 
 ### Mapa muestras 
 ```{r}
+#| fig-width: 15
+
 Mexico <- map_data(map = "world", region = "mexico")
 
-ggplot()+
+map = ggplot()+
     geom_polygon(data = Mexico, aes(x = long, y = lat, group = group))+
     geom_point(data = genind@other, aes(x = lon, y = lat, color = Species))
-    
+map
 ```
 
 ## Descriptivos: Diversidad genética
 
 ```{r}
+library(PopGenReport)
 # summary adegenet
 summary(genind)
 
@@ -77,18 +83,21 @@ summary(genind)
 hfstat_all <- genind2hierfstat(genind)
 
 basicstat <- basic.stats(hfstat_all, diploid = FALSE, digits = 2) 
+basicstat
 
 # lista de formatos de hierfstat por especie
 hfstat_list = lapply(gind_list, genind2hierfstat)
 names(hfstat_list) = unique(df$Species)
 
 basicstat_sp = lapply(hfstat_list, function(x) basic.stats(x,diploid = F,digits = 2))
+basicstat_sp
 
 # Hs per population
-hs = Hs(hfstat)
+hs = Hs(hfstat_all)
+data.frame(pop = names(hs),hs = hs)
 
 # Riqueza alelica rarefacción
-PopGenReport::allel.rich(genind, min.alleles = NULL)
+#PopGenReport::allel.rich(genind, min.alleles = NULL)
 
 
 ```
@@ -98,12 +107,14 @@ PopGenReport::allel.rich(genind, min.alleles = NULL)
 library(mmod)
 
 diff_stats_all <- diff_stats(genind)
+diff_stats_all
 
 diff_stats_sp = lapply(gind_list,diff_stats)
+diff_stats_sp
 
-set.seed(20151219) # Be sure to set a seed for any random analysis!
-reps <- chao_bootstrap(genind, nreps = 10)
-summarise_bootstrap(reps, Gst) 
+#set.seed(20151219) # Be sure to set a seed for any random analysis!
+#reps <- chao_bootstrap(genind, nreps = 10)
+#summarise_bootstrap(reps, "Gst") 
 
 ```
 
@@ -114,6 +125,7 @@ summarise_bootstrap(reps, Gst)
 
 library("poppr")
 res <- poppr.amova(genind, ~  Species/pop, within = FALSE)
+res
 set.seed(98750)
 randtest(res, nrepet = 999)
 
@@ -127,20 +139,19 @@ randtest(res, nrepet = 999)
 library(poppr)
 dist = bitwise.dist(genind)
 setPop(genind) <- ~Species
-net = bruvo.msn(genind)
+#net = bruvo.msn(genind)
 
-data(nancycats)
+#bruvo.msn(genind, replen = rep(2, 51), vertex.label="inds", 
+#               vertex.label.cex=0.7, vertex.label.dist=0.4)
 
-bruvo.msn(genind, replen = rep(2, 51), vertex.label="inds", 
-               vertex.label.cex=0.7, vertex.label.dist=0.4)
-
-poppr.msn(genind, dist, gadj = 15, vertex.label = NA)
+poppr.msn(genind, dist, vertex.label = NA)
 ```
 
 
 ```{r}
 library(pegas)
 library(ggraph)
+library(igraph)
 
 
 loc = as.loci(genind)
@@ -161,6 +172,8 @@ plot(nt, threshold = c(1,10), size = attr(nt, "weight"), fast = TRUE)
 
 
 ```{r}
+#| eval: false
+
 ind = as.data.frame(loc)
 ind$hap = 0
 
@@ -190,11 +203,13 @@ freq = ind[,c(1,10)] %>%
 
 
 ```{r}
+#| eval: false
+
 igraph = igraph %>% igraph::as_data_frame(., 'both') 
 
 igraph[[1]] = igraph[[1]] %>% left_join(freq,by = c("name" = "hap"))
 
-graph_from_data_frame(igraph$edges,directed = F,vertices = igraph$vertices) %>% ggraph(.) + 
+f = graph_from_data_frame(igraph$edges,directed = F,vertices = igraph$vertices) %>% ggraph(.) + 
   geom_edge_link() + 
   geom_node_point(aes(color = `Quercus hypoleucoides` > 0)) +
   geom_node_text(aes(label = name), repel=TRUE)+
