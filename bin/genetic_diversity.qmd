@@ -10,6 +10,20 @@ execute:
   warning: false
 ---
 
+```{r}
+#| echo: false
+#| warning: false
+library(flextable)
+
+# Defaults para tablas de resultados
+set_flextable_defaults(
+  font.size = 10, 
+  theme_fun = theme_zebra,
+  padding = 6,
+  font.family = "Roboto")
+```
+
+
 ## Objetivos
 
 Descriptivos:
@@ -39,9 +53,9 @@ library(hierfstat)
 
 # Cargar los datos en adegenet
 
-#df = read_sheet("https://docs.google.com/spreadsheets/d/1TuepHgDTVpBpM4PaWOm3fZCqwoQWpmTCRvU24AWT7B0/edit?usp=sharing", sheet = 1, col_type = "cccddiiiiiiii")
+df = read_sheet("https://docs.google.com/spreadsheets/d/1TuepHgDTVpBpM4PaWOm3fZCqwoQWpmTCRvU24AWT7B0/edit?usp=sharing", sheet = 1, col_type = "cccddiiiiiiii")
 
-df = read.csv("../data/TRES ESPJUNTAS FILOGENPOP - TRES ESPJUNTAS FILOGENPOP.csv", header = T) 
+#df = read.csv("../data/TRES ESPJUNTAS FILOGENPOP - TRES ESPJUNTAS FILOGENPOP.csv", header = T) 
 
 genind = df %>% 
         select(starts_with("locus")) %>% 
@@ -74,36 +88,83 @@ map
 ## Descriptivos: Diversidad genética
 
 ```{r}
-library(PopGenReport)
+library(officer)
+library(tibble)
+library(tidyr)
+library(gtools)
+
+
 # summary adegenet
-summary(genind)
+sum_ade = summary(genind)
 
 # basic stats hierfstat (per locus and overall)
 
 hfstat_all <- genind2hierfstat(genind)
 
 basicstat <- basic.stats(hfstat_all, diploid = FALSE, digits = 2) 
-basicstat
+
+
+per_loc = cbind(Locus = rownames(basicstat$perloc),basicstat$perloc[,which(colnames(basicstat$perloc) %in% c("Hs","Ht"))], n_alleles = sum_ade$loc.n.all) %>% mutate(Locus = str_remove(Locus,"locus_"))
+
+flextable(per_loc) %>% 
+    set_header_labels(n_alleles = "Número de\nalelos") %>%
+    align( part = "all", align = "center")
+
 
 # lista de formatos de hierfstat por especie
 hfstat_list = lapply(gind_list, genind2hierfstat)
 names(hfstat_list) = unique(df$Species)
 
 basicstat_sp = lapply(hfstat_list, function(x) basic.stats(x,diploid = F,digits = 2))
-basicstat_sp
+
+overall_sp = lapply(seq_along(basicstat_sp), 
+        function(x){data.frame(value = basicstat_sp[[x]]$overall) %>%
+                                 rownames_to_column(var = "var") %>%
+                                 mutate(sp = names(basicstat_sp[x]))}) %>% 
+    do.call(rbind,.) %>% 
+    pivot_wider(id_cols = sp, names_from = var, values_from = value)
+
+# Per species 
+overall_sp %>% 
+    flextable(.,col_keys = c("sp","Hs","Ht","Fst")) %>% 
+    add_footer_row(.,values = c("Total",basicstat$overall[c("Hs","Ht","Fst")]), colwidths = c(1,1,1,1))%>%
+    align(j = 2:4, part = "footer",align = "right") %>%
+    bold(j = 1:4, part = "footer") %>%
+    italic(j = 1, i = 1:3, part = "body") %>%
+    set_header_labels(sp = "Especie")
+
 
 # Hs per population
 hs = Hs(hfstat_all)
-data.frame(pop = names(hs),hs = hs)
 
-# Riqueza alelica rarefacción
-#PopGenReport::allel.rich(genind, min.alleles = NULL)
+library(poppr)
+# Medidas de diversidad aplicadas a genética 
+stats_pop = poppr(genind, minsamp = 8)
 
+strata = unique(strata(genind)) %>% mutate(pop = as.numeric(pop))
+
+border = fp_border(color="black", width = 1)
+
+data.frame(pop = as.numeric(names(hs)),
+           hs = format(hs, digits = 3),
+           Ar = stats_pop$eMLG[-length(stats_pop$eMLG)],
+           s.e.Ar = stats_pop$SE[-length(stats_pop$eMLG)]) %>%
+    arrange(pop) %>% 
+    left_join(strata, by = "pop") %>%
+    flextable(col_keys = c("Species","pop","hs","Ar","s.e.Ar")) %>%
+    merge_v(j = ~Species) %>%
+    hline(i = c(14,35,51), part = "body", border = border) %>%
+    hline_bottom(part = "all", border = border) %>%
+    align(part = "all", align = "center")%>%
+    set_header_labels(Species = "Especie",
+                        pop = "Población",
+                        hs = "Hs")
 
 ```
 
 
 ```{r}
+#| eval: false
 library(mmod)
 
 diff_stats_all <- diff_stats(genind)
@@ -113,8 +174,38 @@ diff_stats_sp = lapply(gind_list,diff_stats)
 diff_stats_sp
 
 #set.seed(20151219) # Be sure to set a seed for any random analysis!
-#reps <- chao_bootstrap(genind, nreps = 10)
-#summarise_bootstrap(reps, "Gst") 
+reps <- chao_bootstrap(genind, nreps = 10)
+summarise_bootstrap(reps,  diff_stats) 
+
+nei = nei.dist(genind)
+
+
+## polysat 
+
+library(polysat)
+
+# Preparar formato genambig
+gen = genind
+gendf <- genind2df(gen, sep = "/", usepop = FALSE)
+gendf <- lapply(gendf, lapply, as.numeric)
+ambig <- new("genambig", samples = indNames(gen), loci = locNames(gen))
+
+for (i in 1:length(names(gendf))){
+    j = names(gendf)[i]
+    res <- lapply(gendf[[j]], function(x) ifelse(is.na(x), Missing(ambig), x))
+    Genotypes(ambig, loci = i) <- res
+  }
+
+Ploidies(ambig) = rep(1,8)
+PopNames(ambig) = as.character(levels(genind@pop))
+PopInfo(ambig) = as.character(genind@pop)
+Usatnts(ambig) = c(1,1,1,1,1,1,1,1)
+
+bootGst = calcPopDiff(simpleFreq(ambig), metric = "Gst", global = T, bootstrap = T)
+quantile(bootGst, c(0.025, 0.975))
+
+write.SPAGeDi(ambig, file = "spagedi.txt")
+
 
 ```
 
