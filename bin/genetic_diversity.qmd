@@ -255,6 +255,7 @@ setPop(genind) <- ~Species
 #poppr.msn(genind, dist, vertex.label = NA)
 ```
 
+[**Red de haplotipos Randomized Minimum Spanning Tree**](DOI: 10.1111/2041-210X.12969)
 
 ```{r}
 #| fig-width: 15
