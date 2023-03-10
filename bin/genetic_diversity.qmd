@@ -518,8 +518,6 @@ g
 
 
 ```{r}
-#| fig-width: 15
-#| fig-height: 10
 #| warning: false
 #| output: false
 
@@ -546,6 +544,13 @@ multiply <- scales::trans_new(name  = "transform",
                           transform = function(x) x*5,
                           inverse   = function(x) x*5)
 
+```
+
+```{r}
+#| fig-width: 15
+#| fig-height: 10
+#| warning: false
+
 graph_from_data_frame(igraph_df$edges,directed = F,vertices = igraph_df$vertices) %>% 
     ggraph(.)+
     geom_edge_link()+
@@ -567,8 +572,6 @@ plot(hy.net$nt, size = hy.net$sz/3, pie = as.matrix(pop.hy[,-1]), legend = c(0, 
 
 
 ```{r}
-#| fig-width: 15
-#| fig-height: 10
 #| warning: false
 #| output: false
 
@@ -594,6 +597,12 @@ igraph_df[[1]] = igraph_df[[1]] %>% left_join(freq.sy,by = c("name" = "hap"))   
 multiply <- scales::trans_new(name  = "transform", 
                           transform = function(x) x*5,
                           inverse   = function(x) x*5)
+```
+
+```{r}
+#| fig-width: 15
+#| fig-height: 10
+#| warning: false
 
 sy = graph_from_data_frame(igraph_df$edges,directed = F,vertices = igraph_df$vertices) %>% 
     ggraph(.)+
@@ -617,8 +626,6 @@ plot(sy.net$nt, size = sy.net$sz/3, pie = as.matrix(pop.sy[,-1]), legend = c(0, 
 
 
 ```{r}
-#| fig-width: 15
-#| fig-height: 10
 #| warning: false
 #| output: false
 
@@ -645,6 +652,13 @@ multiply <- scales::trans_new(name  = "transform",
                           transform = function(x) x*5,
                           inverse   = function(x) x*5)
 
+```
+
+```{r}
+#| fig-width: 15
+#| fig-height: 10
+#| warning: false
+
 graph_from_data_frame(igraph_df$edges,directed = F,vertices = igraph_df$vertices) %>% 
     ggraph(.)+
     geom_edge_link()+
@@ -660,4 +674,5 @@ graph_from_data_frame(igraph_df$edges,directed = F,vertices = igraph_df$vertices
 #pdf("../outputs/red_pegas_si.pdf", width = 20, height = 10)
 plot(si.net$nt, size = si.net$sz/3, pie = as.matrix(pop.si[,-1]), legend = c(0, 30), cex = 1, threshold = c(0,0))
 #dev.off()
+```
 ```
