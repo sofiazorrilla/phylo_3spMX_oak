@@ -6,6 +6,7 @@ format:
 self-contained: true
 fig-width: 11
 fig-height: 9
+code-fold: true
 execute: 
   warning: false
 ---
@@ -13,6 +14,7 @@ execute:
 ```{r}
 #| echo: false
 #| warning: false
+#| label: "table pars"
 library(flextable)
 
 # Defaults para tablas de resultados
@@ -52,6 +54,8 @@ library(tidyverse)
 library(hierfstat)
 
 # Cargar los datos en adegenet
+
+#gs4_auth(email = "sofia.zorrilla95@gmail.com")
 
 df = read_sheet("https://docs.google.com/spreadsheets/d/1TuepHgDTVpBpM4PaWOm3fZCqwoQWpmTCRvU24AWT7B0/edit?usp=sharing", sheet = 1, col_type = "cccddiiiiiiii")
 
@@ -162,9 +166,12 @@ data.frame(pop = as.numeric(names(hs)),
 
 ```
 
+## Estructura filogeográfica (no se como aun, posibilidad SPAGeDi)
 
 ```{r}
 #| eval: false
+#| include: false
+
 library(mmod)
 
 diff_stats_all <- diff_stats(genind)
@@ -174,8 +181,8 @@ diff_stats_sp = lapply(gind_list,diff_stats)
 diff_stats_sp
 
 #set.seed(20151219) # Be sure to set a seed for any random analysis!
-reps <- chao_bootstrap(genind, nreps = 10)
-summarise_bootstrap(reps,  diff_stats) 
+#reps <- chao_bootstrap(genind, nreps = 10)
+#summarise_bootstrap(reps,  diff_stats) 
 
 nei = nei.dist(genind)
 
@@ -205,20 +212,30 @@ bootGst = calcPopDiff(simpleFreq(ambig), metric = "Gst", global = T, bootstrap =
 quantile(bootGst, c(0.025, 0.975))
 
 write.SPAGeDi(ambig, file = "spagedi.txt")
-
-
 ```
 
 ## Estructura genética 
 
 
 ```{r}
-
 library("poppr")
+
 res <- poppr.amova(genind, ~  Species/pop, within = FALSE)
-res
+
+amova <- format(res$componentsofcovariance,digits = 3) 
+amova$names_phi = c(str_remove(rownames(res$statphi)[c(3,2,1)],"Phi-"),"")
+amova$phi <- c(format(res$statphi[,1][c(3,2,1)],digits = 3),"")
+
 set.seed(98750)
-randtest(res, nrepet = 999)
+test <- randtest(res, nrepet = 999)
+
+amova$pval <- c(test$pvalue,"")
+
+amova %>% 
+    rownames_to_column(var = "comp") %>%
+    flextable(col_keys = c("comp","%","names_phi","phi","pval")) %>%
+    set_header_labels(comp = "", `%` = "Porcentaje",names_phi = "",pval = "p.valor")%>%
+    width(j = c(1,3),width = 2)
 
 ```
 
@@ -235,78 +252,141 @@ setPop(genind) <- ~Species
 #bruvo.msn(genind, replen = rep(2, 51), vertex.label="inds", 
 #               vertex.label.cex=0.7, vertex.label.dist=0.4)
 
-poppr.msn(genind, dist, vertex.label = NA)
+#poppr.msn(genind, dist, vertex.label = NA)
 ```
 
 
 ```{r}
+#| fig-width: 15
+#| fig-height: 10
+#| warning: false
+#| output: false
+
 library(pegas)
 library(ggraph)
 library(igraph)
 
-
-loc = as.loci(genind)
+gind = genind
+gind@strata = NULL
+loc = as.loci(gind)
 
 h = pegas::haplotype(loc, locus = 1:8)
 
 dist = dist.haplotype.loci(h)
 
-nt = rmst(dist)
+nt = pegas::rmst(dist)
 
-igraph = as.igraph.haploNet(nt)
+# Nombres de los haplotipos
+nt.labs <- attr(nt, "labels")
+
+# tamaño proporcional a la frecuencia
+sz = attr(h,"freq")
+names(sz) = seq(1,110,1)
+sz = sz[nt.labs]
 
 
-plot(nt, threshold = c(1,10), size = attr(nt, "weight"), fast = TRUE)
-
-```
-
-
-
-```{r}
-#| eval: false
+# Colores por especie
 
 ind = as.data.frame(loc)
 ind$hap = 0
 
 list = as.data.frame(h[1:8,1:110])
 
-i = 1
+
 for(i in 1:ncol(list)){
 
     t = apply(ind[,-c(1,10)],1,function(x) {all(x == list[,i])})
     ind$hap[which(t)] = i
 }
 
+ind$sp = cbind(as.character(genind@strata$Species))
+
+freq = ind[,c(10,11)] %>% 
+        group_by(hap,sp) %>% 
+        mutate(Freq = n(), hap = as.character(hap)) %>% distinct() %>%  ungroup %>%
+        pivot_wider(id_cols = c(hap), names_from = sp, values_from = Freq, values_fill = 0) 
+
+
+Sp = freq[nt.labs,] %>% as.data.frame()
+rownames(Sp) = Sp$hap
+
+```
+```{r}
+load("xy_hapNet.RData")
+
+#pdf("../outputs/red_pegas.pdf", width = 20, height = 10)
+plot(nt, size = sz/2, pie = as.matrix(Sp[,-1]), legend = c(0, 30), cex = 0.5)#, xy = xy)
+#dev.off()
+
+# Para ajustar las coordenadas de los haplotipos de manera interactiva 
+#xy = replot()
+#save(xy,file = "xy_hapNet.RData")
+```
+
+```{r}
+
+ind = as.data.frame(loc)
+ind$hap = 0
+
+list = as.data.frame(h[1:8,1:110])
+
+
+for(i in 1:ncol(list)){
+
+    t = apply(ind[,-c(1,10)],1,function(x) {all(x == list[,i])})
+    ind$hap[which(t)] = i
+}
+
+ind$sp = cbind(as.character(genind@strata$Species))
+
 strata = df[,c(1,3)] %>% mutate(pop = str_remove(df$pop,"pop")) %>% distinct()
 
-freq = ind[,c(1,10)] %>% 
-        left_join(strata,by = c("population" = "pop")) %>% 
-        select(-population) %>%
-        group_by(hap,Species) %>% 
-        mutate(Freq = n()) %>% distinct() %>%  ungroup %>%
-        pivot_wider(id_cols = c(hap), names_from = Species, values_from = Freq, values_fill = 0) %>% 
-        mutate(`Quercus hypoleucoides` = `Quercus hypoleucoides`/sum(`Quercus hypoleucoides`,`Quercus scytophylla`,`Quercus sideroxyla`),
-                `Quercus scytophylla` = `Quercus scytophylla`/sum(`Quercus hypoleucoides`,`Quercus scytophylla`,`Quercus sideroxyla`),
-                `Quercus sideroxyla` = `Quercus sideroxyla`/sum(`Quercus hypoleucoides`,`Quercus scytophylla`,`Quercus sideroxyla`),
-                hap = as.character(hap)) 
+freq = ind[,c(10,11)] %>% 
+        #left_join(strata,by = c("population" = "pop")) %>% 
+        #select(-population) %>%
+        group_by(hap,sp) %>% 
+        mutate(Freq = n(), hap = as.character(hap)) %>% distinct() %>%  ungroup %>%
+        pivot_wider(id_cols = c(hap), names_from = sp, values_from = Freq, values_fill = 0) 
 
 ```
 
 
 ```{r}
-#| eval: false
+#| fig-width: 15
+#| fig-height: 10
+#| warning: false
 
-igraph = igraph %>% igraph::as_data_frame(., 'both') 
+library(scatterpie)
+library(graphlayouts)
 
-igraph[[1]] = igraph[[1]] %>% left_join(freq,by = c("name" = "hap"))
+igraph = as.igraph.haploNet(nt)
 
-f = graph_from_data_frame(igraph$edges,directed = F,vertices = igraph$vertices) %>% ggraph(.) + 
-  geom_edge_link() + 
-  geom_node_point(aes(color = `Quercus hypoleucoides` > 0)) +
-  geom_node_text(aes(label = name), repel=TRUE)+
-  theme_graph()
+igraph_df = igraph %>% igraph::as_data_frame(., 'both') 
 
+xy <- layout_with_stress(igraph)
+colnames(xy) = c("x","y")
 
-f$data %>% left_join(distinct(),by = c("name" = "hap"))
-data = freq, aes(color = Species, size = Freq)
+freq = freq %>% rowwise()%>% mutate(tot = sum(`Quercus hypoleucoides`,`Quercus scytophylla`,`Quercus sideroxyla`))
+
+igraph_df[[1]] = igraph_df[[1]] %>% left_join(freq,by = c("name" = "hap"))   %>% cbind(xy)
+
+igraph_df[[2]] = cbind(igraph_df[[2]],weight = attr(nt,"weight"))
+
+multiply <- scales::trans_new(name  = "transform", 
+                          transform = function(x) x*5,
+                          inverse   = function(x) x*5)
+
+g = graph_from_data_frame(igraph_df$edges,directed = F,vertices = igraph_df$vertices) %>% 
+    ggraph(.)+
+    #ggraph()+
+    geom_edge_link()+#aes(edge_colour = weight < 14)) + 
+    geom_node_point()+
+    geom_scatterpie(data = igraph_df$vertices, aes(x = x, y  = y, r = ((tot/50)/pi)^(1/2)), cols = c("Quercus hypoleucoides","Quercus scytophylla","Quercus sideroxyla"))+
+    geom_node_text(aes(label = name), repel=TRUE)+
+    coord_trans(x = multiply, y = multiply)+
+    scale_edge_colour_manual(values = c("#FFFFFF","#000000"))+
+    theme_graph()
+
+g
+
 ```
