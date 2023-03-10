@@ -128,16 +128,6 @@ overall_sp = lapply(seq_along(basicstat_sp),
     do.call(rbind,.) %>% 
     pivot_wider(id_cols = sp, names_from = var, values_from = value)
 
-# Per species 
-overall_sp %>% 
-    flextable(.,col_keys = c("sp","Hs","Ht","Fst")) %>% 
-    add_footer_row(.,values = c("Total",basicstat$overall[c("Hs","Ht","Fst")]), colwidths = c(1,1,1,1))%>%
-    align(j = 2:4, part = "footer",align = "right") %>%
-    bold(j = 1:4, part = "footer") %>%
-    italic(j = 1, i = 1:3, part = "body") %>%
-    set_header_labels(sp = "Especie")
-
-
 # Hs per population
 hs = Hs(hfstat_all)
 
@@ -145,6 +135,76 @@ library(poppr)
 # Medidas de diversidad aplicadas a genética 
 stats_pop = poppr(genind, minsamp = 8)
 
+```
+
+```{r}
+## polysat = calcular Gst y Rst
+
+library(polysat)
+
+# Preparar formato genambig
+gen = gind_list[[2]]
+ploidy = 1
+genind2ambig <- function(gen,ploidy){
+        gendf <- genind2df(gen, sep = "/", usepop = FALSE)
+        gendf <- lapply(gendf, lapply, as.numeric)
+        ambig <- new("genambig", samples = indNames(gen), loci = locNames(gen))
+
+        for (i in 1:length(names(gendf))){
+            j = names(gendf)[i]
+            res <- lapply(gendf[[j]], function(x) ifelse(is.na(x), Missing(ambig), x))
+            Genotypes(ambig, loci = i) <- res
+        }
+
+        Ploidies(ambig) = rep(1,length(gen@loc.n.all))
+        PopInfo(ambig) = as.character(gen@pop)
+        PopNames(ambig) = as.character(levels(gen@pop))
+        Usatnts(ambig) = c(rep(ploidy,length(gen@loc.n.all)))
+        return(ambig)
+}
+
+ambig <- genind2ambig(genind,1)
+
+list_ambig <- lapply(gind_list,function(x)genind2ambig(x,ploidy = 1))
+
+get_gst <- function(ambig){
+    Gst = calcPopDiff(simpleFreq(ambig), metric = "Gst", global = T, bootstrap = F)
+    bootGst = calcPopDiff(simpleFreq(ambig), metric = "Gst", global = T, bootstrap = T)
+    ci.Gst <- quantile(bootGst, c(0.025, 0.975))
+    return(data.frame(Gst = format(Gst,digits = 3), ci.Gst = paste0("(",format(ci.Gst[1],digits = 2),", ",format(ci.Gst[2],digits = 2),")")))
+}
+
+get_rst <- function(ambig){
+    Rst = calcPopDiff(simpleFreq(ambig), metric = "Rst", global = T, bootstrap = F, object = ambig)
+    bootRst = calcPopDiff(simpleFreq(ambig), metric = "Rst", global = T, bootstrap = T, object = ambig)
+    ci.Rst <- quantile(bootRst, c(0.025, 0.975))
+    return(data.frame(Rst = format(Rst,digits = 3), ci.Rst = paste0("(",format(ci.Rst[1],digits = 2),", ",format(ci.Rst[2],digits = 2),")")))
+}
+
+list_gst <- lapply(list_ambig,get_gst) %>%
+                do.call(rbind,.)
+list_rst <- lapply(list_ambig,get_rst)%>%
+                do.call(rbind,.)
+
+overall_gst = get_gst(ambig)
+overall_rst = get_rst(ambig)
+
+```
+
+```{r}
+# Per species 
+
+cbind(overall_sp,list_gst[c(1,3,2),],list_rst[c(1,3,2),]) %>% 
+    flextable(.,col_keys = c("sp","Hs","Ht","Fst","Gst","ci.Gst","Rst","ci.Rst")) %>% 
+    add_footer_row(.,values = c("Total",basicstat$overall[c("Hs","Ht","Fst")],overall_gst,overall_rst), colwidths = c(1,1,1,1,1,1,1,1))%>%
+    align(j = 2:4, part = "footer",align = "right") %>%
+    bold(j = 1:4, part = "footer") %>%
+    italic(j = 1, i = 1:3, part = "body") %>%
+    set_header_labels(sp = "Especie")
+```
+
+```{r}
+# Crear tabla para las poblaciones
 strata = unique(strata(genind)) %>% mutate(pop = as.numeric(pop))
 
 border = fp_border(color="black", width = 1)
@@ -163,7 +223,6 @@ data.frame(pop = as.numeric(names(hs)),
     set_header_labels(Species = "Especie",
                         pop = "Población",
                         hs = "Hs")
-
 ```
 
 ## Estructura filogeográfica (no se como aun, posibilidad SPAGeDi)
@@ -220,22 +279,64 @@ write.SPAGeDi(ambig, file = "spagedi.txt")
 ```{r}
 library("poppr")
 
-res <- poppr.amova(genind, ~  Species/pop, within = FALSE)
+# Función para obtener resultados del amova con formato adecuado
 
-amova <- format(res$componentsofcovariance,digits = 3) 
-amova$names_phi = c(str_remove(rownames(res$statphi)[c(3,2,1)],"Phi-"),"")
-amova$phi <- c(format(res$statphi[,1][c(3,2,1)],digits = 3),"")
+get_res_table <- function(res, seed, type = "pop", name = NULL){
+    if(type == "global"){
+        name = "Global"
+        # Juntar los datos
+        amova <- format(res$componentsofcovariance,digits = 3) 
+        amova$names_phi = c(str_remove(rownames(res$statphi)[c(3,2,1)],"Phi-"),"")
+        amova$phi <- c(format(res$statphi[,1][c(3,2,1)],digits = 3),"")
 
-set.seed(98750)
-test <- randtest(res, nrepet = 999)
+        # prueba de hipotesis
+        set.seed(seed)
+        test <- randtest(res, nrepet = 999)
 
-amova$pval <- c(test$pvalue,"")
+        # agregar pvalor
+        amova$pval <- c(test$pvalue,"")
+        } else{
 
-amova %>% 
+        amova <- format(res$componentsofcovariance,digits = 3) 
+        amova$names_phi = c(str_remove(rownames(res$statphi),"Phi-"),"","")
+        amova$phi <- c(format(res$statphi[,1],digits = 3),"","")
+
+        # prueba de hipotesis
+        set.seed(seed)
+        test <- randtest(res, nrepet = 999)
+
+        # agregar pvalor
+        amova$pval <- c(test$pvalue,"","")
+        }
+
+    #Formato
+
+    return(amova %>% 
     rownames_to_column(var = "comp") %>%
     flextable(col_keys = c("comp","%","names_phi","phi","pval")) %>%
-    set_header_labels(comp = "", `%` = "Porcentaje",names_phi = "",pval = "p.valor")%>%
-    width(j = c(1,3),width = 2)
+    set_header_labels(comp = name, `%` = "Porcentaje",names_phi = "",pval = "p.valor")%>%
+    width(j = c(1,3),width = 2))}
+
+
+# Global
+res <- poppr.amova(genind, ~  Species/pop, within = FALSE)
+
+global <- get_res_table(res,98750, type = "global")
+
+global
+
+# Para cada especie
+
+res_pop <- lapply(gind_list, function(x)poppr.amova(x, ~ pop, within = F))
+names(res_pop) <- c("Q. hypoleucoides", "Q. sideroxyla", "Q. syctophylla")
+
+seeds <- list(1635, 5467, 5391)
+
+amova_sp <- lapply(seq_along(res_pop),function(x){get_res_table(res_pop[[x]],seeds[[x]],type = "pop", name = names(res_pop[x]))})
+
+amova_sp[[1]]
+amova_sp[[2]]
+amova_sp[[3]]
 
 ```
 
