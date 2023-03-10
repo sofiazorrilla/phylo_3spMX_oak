@@ -26,6 +26,7 @@ set_flextable_defaults(
 ```
 
 
+
 ## Objetivos
 
 Descriptivos:
@@ -46,6 +47,7 @@ Red de haplotipos
 
 
 ## Datos
+
 
 ```{r}
 library(adegenet)
@@ -77,7 +79,9 @@ names(gind_list) = unique(df$Species)
 
 ```
 
+
 ### Mapa muestras 
+
 ```{r}
 #| fig-width: 15
 
@@ -89,7 +93,9 @@ map = ggplot()+
 map
 ```
 
+
 ## Descriptivos: Diversidad genética
+
 
 ```{r}
 library(officer)
@@ -245,7 +251,9 @@ data.frame(pop = as.numeric(names(hs)),
                         hs = "Hs")
 ```
 
+
 ## Estructura filogeográfica (no se como aun, posibilidad SPAGeDi)
+
 
 ```{r}
 #| eval: false
@@ -293,7 +301,9 @@ quantile(bootGst, c(0.025, 0.975))
 write.SPAGeDi(ambig, file = "spagedi.txt")
 ```
 
+
 ## Estructura genética 
+
 
 
 ```{r}
@@ -361,7 +371,9 @@ amova_sp[[3]]
 ```
 
 
+
 ## Red de haplotipos
+
 
 
 ```{r}
@@ -377,7 +389,9 @@ setPop(genind) <- ~Species
 #poppr.msn(genind, dist, vertex.label = NA)
 ```
 
+
 [**Red de haplotipos Randomized Minimum Spanning Tree**](DOI: 10.1111/2041-210X.12969)
+
 
 ```{r}
 #| fig-width: 15
@@ -453,6 +467,7 @@ Sp = freq[global.nt$nt.labs,] %>% as.data.frame()
 rownames(Sp) = Sp$hap
 
 ```
+
 ```{r}
 #| fig-width: 15
 #| fig-height: 10
@@ -514,7 +529,9 @@ g
 
 ```
 
+
 ## Red Q. hypoleucoides
+
 
 
 ```{r}
@@ -563,7 +580,9 @@ plot(hy.net$nt, size = hy.net$sz/3, pie = as.matrix(pop.hy[,-1]), legend = c(0, 
 #dev.off()
 ```
 
+
 ## Red Q. syctophylla
+
 
 
 ```{r}
@@ -613,7 +632,9 @@ plot(sy.net$nt, size = sy.net$sz/3, pie = as.matrix(pop.sy[,-1]), legend = c(0, 
 #dev.off()
 ```
 
+
 ## Red Q. sideroxyla
+
 
 
 ```{r}
