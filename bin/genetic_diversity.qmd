@@ -12,10 +12,24 @@ execute:
 ---
 
 ```{r}
+#| warning: false
+#| output: false
+
+#library(officer)
+#library(tibble)
+#library(tidyr)
+
+list.of.packages <- c("flextable", "tidyverse", "poppr","polysat","adegenet","googlesheets4","hierfstat","gtools","mmod","pegas","ggraph","igraph","scatterpie","graphlayouts")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+packages <- lapply(as.list(list.of.packages),library,character.only = T)
+```
+
+```{r}
 #| echo: false
 #| warning: false
 #| label: "table pars"
-library(flextable)
 
 # Defaults para tablas de resultados
 set_flextable_defaults(
@@ -48,18 +62,13 @@ Red de haplotipos
 ## Datos
 
 ```{r}
-library(adegenet)
-library(googlesheets4)
-library(tidyverse)
-library(hierfstat)
-
 # Cargar los datos en adegenet
 
 #gs4_auth(email = "sofia.zorrilla95@gmail.com")
 
-df = read_sheet("https://docs.google.com/spreadsheets/d/1TuepHgDTVpBpM4PaWOm3fZCqwoQWpmTCRvU24AWT7B0/edit?usp=sharing", sheet = 1, col_type = "cccddiiiiiiii")
+#df = read_sheet("https://docs.google.com/spreadsheets/d/1TuepHgDTVpBpM4PaWOm3fZCqwoQWpmTCRvU24AWT7B0/edit?usp=sharing", sheet = 1, col_type = "cccddiiiiiiii")
 
-#df = read.csv("../data/TRES ESPJUNTAS FILOGENPOP - TRES ESPJUNTAS FILOGENPOP.csv", header = T) 
+df = read.csv("../data/TRES ESPJUNTAS FILOGENPOP - TRES ESPJUNTAS FILOGENPOP.csv", header = T) 
 
 genind = df %>% 
         select(starts_with("locus")) %>% 
@@ -92,12 +101,6 @@ map
 ## Descriptivos: Diversidad genética
 
 ```{r}
-library(officer)
-library(tibble)
-library(tidyr)
-library(gtools)
-
-
 # summary adegenet
 sum_ade = summary(genind)
 
@@ -131,16 +134,13 @@ overall_sp = lapply(seq_along(basicstat_sp),
 # Hs per population
 hs = Hs(hfstat_all)
 
-library(poppr)
-# Medidas de diversidad aplicadas a genética 
+ Medidas de diversidad aplicadas a genética 
 stats_pop = poppr(genind, minsamp = 8)
 
 ```
 
 ```{r}
 ## polysat = calcular Gst y Rst
-
-library(polysat)
 
 # Preparar formato genambig
 gen = gind_list[[2]]
@@ -251,8 +251,6 @@ data.frame(pop = as.numeric(names(hs)),
 #| eval: false
 #| include: false
 
-library(mmod)
-
 diff_stats_all <- diff_stats(genind)
 diff_stats_all
 
@@ -265,30 +263,7 @@ diff_stats_sp
 
 nei = nei.dist(genind)
 
-
 ## polysat 
-
-library(polysat)
-
-# Preparar formato genambig
-gen = genind
-gendf <- genind2df(gen, sep = "/", usepop = FALSE)
-gendf <- lapply(gendf, lapply, as.numeric)
-ambig <- new("genambig", samples = indNames(gen), loci = locNames(gen))
-
-for (i in 1:length(names(gendf))){
-    j = names(gendf)[i]
-    res <- lapply(gendf[[j]], function(x) ifelse(is.na(x), Missing(ambig), x))
-    Genotypes(ambig, loci = i) <- res
-  }
-
-Ploidies(ambig) = rep(1,8)
-PopNames(ambig) = as.character(levels(genind@pop))
-PopInfo(ambig) = as.character(genind@pop)
-Usatnts(ambig) = c(1,1,1,1,1,1,1,1)
-
-bootGst = calcPopDiff(simpleFreq(ambig), metric = "Gst", global = T, bootstrap = T)
-quantile(bootGst, c(0.025, 0.975))
 
 write.SPAGeDi(ambig, file = "spagedi.txt")
 ```
@@ -297,8 +272,6 @@ write.SPAGeDi(ambig, file = "spagedi.txt")
 
 
 ```{r}
-library("poppr")
-
 # Función para obtener resultados del amova con formato adecuado
 
 get_res_table <- function(res, seed, type = "pop", name = NULL){
@@ -366,7 +339,7 @@ amova_sp[[3]]
 
 ```{r}
 #| include: false
-library(poppr)
+
 dist = bitwise.dist(genind)
 setPop(genind) <- ~Species
 #net = bruvo.msn(genind)
@@ -377,17 +350,18 @@ setPop(genind) <- ~Species
 #poppr.msn(genind, dist, vertex.label = NA)
 ```
 
+Explicación del algoritmo RMSN
+
 [**Red de haplotipos Randomized Minimum Spanning Tree**](DOI: 10.1111/2041-210X.12969)
+
+Stress layout:
+- Se busca minimizar la función de stress usada en MDS en la que se busca encontrar las coordenadas cartesianas que minimicen la diferencia entre la distancia euclidiana en el plano y la distancia geodésica (o rank order) entre los puntos en el espacio multidimensional.
 
 ```{r}
 #| fig-width: 15
 #| fig-height: 10
 #| warning: false
 #| output: false
-
-library(pegas)
-library(ggraph)
-library(igraph)
 
 # Generar red de haplotipos
 
@@ -481,8 +455,6 @@ plot(global.nt$nt, size = global.nt$sz/2, pie = as.matrix(Sp[,-1]), legend = c(0
 #| fig-height: 10
 #| warning: false
 
-library(scatterpie)
-library(graphlayouts)
 
 igraph = as.igraph.haploNet(global.nt$nt)
 
