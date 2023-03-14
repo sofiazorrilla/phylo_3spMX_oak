@@ -19,7 +19,7 @@ execute:
 #library(tibble)
 #library(tidyr)
 
-list.of.packages <- c("flextable", "tidyverse", "poppr","polysat","adegenet","googlesheets4","hierfstat","gtools","mmod","pegas","ggraph","igraph","scatterpie","graphlayouts")
+list.of.packages <- c("flextable", "officer","tidyverse","maps", "poppr","polysat","adegenet","googlesheets4","hierfstat","gtools","mmod","pegas","ggraph","igraph","scatterpie","graphlayouts")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -134,7 +134,7 @@ overall_sp = lapply(seq_along(basicstat_sp),
 # Hs per population
 hs = Hs(hfstat_all)
 
- Medidas de diversidad aplicadas a genética 
+# Medidas de diversidad aplicadas a genética 
 stats_pop = poppr(genind, minsamp = 8)
 
 ```
@@ -417,13 +417,26 @@ hap_freq <- function(gind,h, cat){
             group_by(hap,sp) %>% 
             mutate(Freq = n(), hap = as.character(hap)) %>% distinct() %>%  ungroup %>%
             pivot_wider(id_cols = c(hap), names_from = sp, values_from = Freq, values_fill = 0) 
-    return(freq)
+    
+    latlon <- cbind(gind@other[c("lat","lon")],pop = gind@pop)%>% distinct()
+
+    ind <- ind %>% 
+        group_by(sp,population,hap) %>% 
+        summarise(n = n())
+        
+    freq_ind <- ind %>% 
+        arrange(hap)%>%
+        pivot_wider(names_from = hap,names_prefix = "hap_", values_from = n, values_fill = 0)%>% 
+        left_join(latlon, by = c("population"= "pop"))
+   
+
+        return(list(freq = freq, freq_ind = freq_ind, ind = ind))
 }
 
 freq = hap_freq(gind = genind, h = global.nt$h,cat = as.character(genind@strata$Species))
 
 # ordenar los haplotipos de acuerdo a nt.labs
-Sp = freq[global.nt$nt.labs,] %>% as.data.frame()
+Sp = freq$freq[global.nt$nt.labs,] %>% as.data.frame()
 rownames(Sp) = Sp$hap
 
 ```
@@ -431,7 +444,7 @@ rownames(Sp) = Sp$hap
 #| fig-width: 15
 #| fig-height: 10
 #| warning: false
-#| output: false
+
 
 # Cargar coordenadas
 load("xy_hapNet.RData")
@@ -448,6 +461,67 @@ plot(global.nt$nt, size = global.nt$sz/2, pie = as.matrix(Sp[,-1]), legend = c(0
 #save(xy,file = "xy_hapNet.RData")
 #nt = global.nt
 #save(nt,file = "global_nt.RData")
+```
+
+### Mapa global 
+```{r}
+#| eval: false
+library(ggrepel)
+library(patchwork)
+
+Mexico <- map_data(map = "world", region = "mexico")
+
+# Haplotipos compartidos entre especies 
+colors = freq$ind %>% 
+    group_by(hap) %>% 
+    reframe(n_sp = n_distinct(sp), concat = paste(unique(sp),collapse = "_"))%>% 
+    rowwise()%>%
+    mutate(color = ifelse(all(str_detect(concat,c("hy","si","sc"))),"#4f0a0a",
+                            ifelse(all(str_detect(concat,c("hy","si"))),"#1c325f",
+                                ifelse(all(str_detect(concat,c("hy","sc"))),"#264c3f",
+                                    ifelse(all(str_detect(concat,c("si","sc"))),"#b15b1b","#D3D3D3")))),
+            hap = paste0("hap_",hap))
+
+
+
+source("get_xy.r")
+
+df = freq$freq_ind[c("population","lon","lat")]
+df$label = df$population
+repel = get_xy_repel(df)
+df_repel  <- left_join(freq$freq_ind,repel,by = c("population" = "lab"))
+
+haps = freq$ind %>% left_join(freq$freq_ind[c("population","lon","lat")], by = "population")
+
+ ggplot()+
+    #geom_polygon(data = Mexico, aes(x = long, y = lat, group = group))+
+    geom_point(data = df_repel, aes(x = lon, y = lat, color = sp))+
+    geom_segment(data = df_repel, aes(x = lon, y = lat, xend = x, yend = y), color = "white")+
+    geom_scatterpie(data = df_repel, aes(x = x, y = y), cols = colnames(df_repel)[startsWith(colnames(df_repel),"hap")], alpha = 0.8)+
+    geom_text_repel(data = haps, aes(label = hap, x = lon,y = lat), box.padding = 1,max.overlaps = Inf, xlim = c(-Inf, Inf), ylim = c(-Inf, Inf), color = "black")+
+    scale_fill_manual(values = colors$color, guide = "none")+
+    theme_minimal()
+    #theme(legend.position = "none")
+
+
+
+colors <- c(hy_si_sc = "#4f0a0a", hy_si = "#1c325f", hy_sc = "#264c3f", si_sc = "#b15b1b")
+
+# create a data frame with a column for the colors
+df_lab <- data.frame(sp = names(colors),colors)
+
+# create a bar plot with each color as a bar
+leg = ggplot(df_lab, aes(x = 1, y = sp, fill = colors, label = sp)) +
+  geom_bar(width = 1, stat = "identity") +
+  geom_text(x = 0.6, size = 3, color = "gray")+
+  scale_fill_manual(values = df_lab$colors) +
+  coord_polar(theta = "y")+
+  theme_void() #+
+  theme(legend.position = "none")
+
+
+map + inset_element(leg,0,0,0.2,0.2)
+
 ```
 
 ```{r}
@@ -498,7 +572,7 @@ hy.net  <- get_hapNet(gind_list[[1]])
 freq.hy = hap_freq(gind = gind_list[[1]], h = hy.net$h,cat = as.character(gind_list[[1]]@pop))
 
 # ordenar los haplotipos de acuerdo a nt.labs
-pop.hy = freq.hy[hy.net$nt.labs,] %>% as.data.frame()
+pop.hy = freq.hy$freq[hy.net$nt.labs,] %>% as.data.frame()
 rownames(pop.hy) = pop.hy$hap
 
 igraph = as.igraph.haploNet(hy.net$nt)
@@ -552,7 +626,7 @@ sy.net  <- get_hapNet(gind_list[[2]])
 freq.sy = hap_freq(gind = gind_list[[2]], h = sy.net$h,cat = as.character(gind_list[[2]]@pop))
 
 # ordenar los haplotipos de acuerdo a nt.labs
-pop.sy = freq.sy[sy.net$nt.labs,] %>% as.data.frame()
+pop.sy = freq.sy$freq[sy.net$nt.labs,] %>% as.data.frame()
 rownames(pop.sy) = pop.sy$hap
 
 igraph = as.igraph.haploNet(sy.net$nt)
@@ -606,7 +680,7 @@ si.net  <- get_hapNet(gind_list[[3]])
 freq.si = hap_freq(gind = gind_list[[3]], h = si.net$h,cat = as.character(gind_list[[3]]@pop))
 
 # ordenar los haplotipos de acuerdo a nt.labs
-pop.si = freq.si[si.net$nt.labs,] %>% as.data.frame()
+pop.si = freq.si$freq[si.net$nt.labs,] %>% as.data.frame()
 rownames(pop.si) = pop.si$hap
 
 igraph = as.igraph.haploNet(si.net$nt)
